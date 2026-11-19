@@ -9,7 +9,7 @@ data:
       ],
       "timezone": "browser",
       "schemaVersion": 39,
-      "version": 1,
+      "version": 2,
       "refresh": "10s",
       "time": {
         "from": "now-30m",
@@ -36,7 +36,7 @@ data:
                 "type": "prometheus",
                 "uid": "prometheus"
               },
-              "expr": "carbon_current_intensity",
+              "expr": "max(carbon_current_intensity)",
               "legendFormat": "",
               "refId": "A"
             }
@@ -92,7 +92,7 @@ data:
                 "type": "prometheus",
                 "uid": "prometheus"
               },
-              "expr": "carbon_jobs_waiting",
+              "expr": "max(carbon_jobs_waiting)",
               "legendFormat": "",
               "refId": "A"
             }
@@ -127,7 +127,7 @@ data:
         {
           "id": 3,
           "type": "stat",
-          "title": "Estimated CO2 avoided",
+          "title": "Estimated CO2 avoided (selected range)",
           "datasource": {
             "type": "prometheus",
             "uid": "prometheus"
@@ -144,7 +144,7 @@ data:
                 "type": "prometheus",
                 "uid": "prometheus"
               },
-              "expr": "carbon_estimated_co2_avoided_grams_total",
+              "expr": "sum(max_over_time(carbon_estimated_co2_avoided_grams_total[$__range]))",
               "legendFormat": "",
               "refId": "A"
             }
@@ -180,7 +180,7 @@ data:
         {
           "id": 4,
           "type": "stat",
-          "title": "Deadline-forced runs",
+          "title": "Deadline-forced runs (selected range)",
           "datasource": {
             "type": "prometheus",
             "uid": "prometheus"
@@ -197,7 +197,7 @@ data:
                 "type": "prometheus",
                 "uid": "prometheus"
               },
-              "expr": "carbon_deadline_forced_runs_total",
+              "expr": "sum(max_over_time(carbon_deadline_forced_runs_total[$__range]))",
               "legendFormat": "",
               "refId": "A"
             }
@@ -249,7 +249,7 @@ data:
                 "type": "prometheus",
                 "uid": "prometheus"
               },
-              "expr": "carbon_current_intensity",
+              "expr": "max(carbon_current_intensity)",
               "legendFormat": "intensity",
               "refId": "A"
             },
@@ -258,7 +258,7 @@ data:
                 "type": "prometheus",
                 "uid": "prometheus"
               },
-              "expr": "carbon_policy_threshold",
+              "expr": "max(carbon_policy_threshold)",
               "legendFormat": "threshold",
               "refId": "B"
             }
@@ -299,7 +299,7 @@ data:
                 "type": "prometheus",
                 "uid": "prometheus"
               },
-              "expr": "carbon_jobs_waiting",
+              "expr": "max(carbon_jobs_waiting)",
               "legendFormat": "waiting",
               "refId": "A"
             }
@@ -340,7 +340,7 @@ data:
                 "type": "prometheus",
                 "uid": "prometheus"
               },
-              "expr": "increase(carbon_jobs_suspended_total[5m])",
+              "expr": "sum(increase(carbon_jobs_suspended_total[5m]))",
               "legendFormat": "suspended",
               "refId": "A"
             },
@@ -349,7 +349,7 @@ data:
                 "type": "prometheus",
                 "uid": "prometheus"
               },
-              "expr": "increase(carbon_jobs_resumed_total[5m])",
+              "expr": "sum(increase(carbon_jobs_resumed_total[5m]))",
               "legendFormat": "resumed",
               "refId": "B"
             },
@@ -358,7 +358,7 @@ data:
                 "type": "prometheus",
                 "uid": "prometheus"
               },
-              "expr": "increase(carbon_deadline_forced_runs_total[5m])",
+              "expr": "sum(increase(carbon_deadline_forced_runs_total[5m]))",
               "legendFormat": "forced by deadline",
               "refId": "C"
             }
