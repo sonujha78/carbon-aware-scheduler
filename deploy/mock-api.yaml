@@ -1,0 +1,45 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: carbon-system
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mock-carbon-api
+  namespace: carbon-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mock-carbon-api
+  template:
+    metadata:
+      labels:
+        app: mock-carbon-api
+    spec:
+      containers:
+        - name: api
+          image: carbon-mock-api:dev
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          env:
+            - name: SIM_HOUR_SECONDS
+              value: "60"
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mock-carbon-api
+  namespace: carbon-system
+spec:
+  selector:
+    app: mock-carbon-api
+  ports:
+    - port: 80
+      targetPort: 8080
