@@ -1,0 +1,27 @@
+alertmanager:
+  enabled: false
+
+grafana:
+  adminPassword: admin        # local demo only
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      searchNamespace: ALL
+
+prometheus:
+  prometheusSpec:
+    retention: 2d
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    resources:
+      requests:
+        cpu: 100m
+        memory: 400Mi
+      limits:
+        memory: 1Gi
+
+kubeStateMetrics:
+  enabled: true
+nodeExporter:
+  enabled: false
