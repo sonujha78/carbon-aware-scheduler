@@ -1,0 +1,19 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: nightly-report
+  namespace: default
+  labels:
+    green.devops/deferrable: "true"
+  annotations:
+    green.devops/estimated-runtime: "1m"
+    green.devops/power-watts: "150"
+spec:
+  suspend: true
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: report
+          image: busybox:1.36
+          command: ["sh", "-c", "echo generating report; sleep 60; echo done"]
