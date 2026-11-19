@@ -1,0 +1,57 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: gofmt
+        run: test -z "$(gofmt -l .)"
+      - name: vet
+        run: go vet ./...
+      - name: unit tests
+        run: go test ./... -race -count=1
+
+  e2e:
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create kind cluster
+        uses: helm/kind-action@v1
+        with:
+          cluster_name: carbon-ci
+      - name: Build images
+        run: |
+          docker build -f mock-api/Dockerfile -t carbon-mock-api:dev .
+          docker build -f controller/Dockerfile -t carbon-controller:dev .
+      - name: Load images into kind
+        run: |
+          kind load docker-image carbon-mock-api:dev --name carbon-ci
+          kind load docker-image carbon-controller:dev --name carbon-ci
+      - name: Deploy
+        run: |
+          kubectl apply -f crds/carbonpolicy.yaml
+          kubectl wait --for=condition=established crd/carbonpolicies.green.devops --timeout=60s
+          kubectl apply -f deploy/mock-api.yaml
+          kubectl apply -f deploy/controller.yaml
+          kubectl apply -f examples/carbonpolicy.yaml
+          kubectl -n carbon-system rollout status deploy/mock-carbon-api --timeout=120s
+          kubectl -n carbon-system rollout status deploy/carbon-controller --timeout=120s
+      - name: End-to-end tests
+        run: ./tests/e2e.sh
+      - name: Dump controller logs on failure
+        if: failure()
+        run: kubectl -n carbon-system logs deploy/carbon-controller --tail=100

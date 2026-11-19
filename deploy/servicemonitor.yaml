@@ -1,0 +1,12 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: carbon-controller
+  namespace: carbon-system
+spec:
+  selector:
+    matchLabels:
+      app: carbon-controller
+  endpoints:
+    - port: metrics
+      interval: 15s
