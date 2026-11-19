@@ -1,0 +1,104 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: carbon-controller
+  namespace: carbon-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: carbon-controller
+rules:
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  - apiGroups: ["green.devops"]
+    resources: ["carbonpolicies"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["green.devops"]
+    resources: ["carbonpolicies/status"]
+    verbs: ["get", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: carbon-controller
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: carbon-controller
+subjects:
+  - kind: ServiceAccount
+    name: carbon-controller
+    namespace: carbon-system
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: carbon-controller
+  namespace: carbon-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: carbon-controller
+  template:
+    metadata:
+      labels:
+        app: carbon-controller
+    spec:
+      serviceAccountName: carbon-controller
+      securityContext:
+        runAsNonRoot: true
+      containers:
+        - name: controller
+          image: carbon-controller:dev
+          imagePullPolicy: IfNotPresent
+          args:
+            - -carbon-url=http://mock-carbon-api.carbon-system.svc.cluster.local/intensity
+            - -interval=10s
+            - -policy=default
+          ports:
+            - name: metrics
+              containerPort: 9095
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: metrics
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+          resources:
+            requests:
+              cpu: 20m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: carbon-controller
+  namespace: carbon-system
+  labels:
+    app: carbon-controller
+spec:
+  selector:
+    app: carbon-controller
+  ports:
+    - name: metrics
+      port: 9095
+      targetPort: metrics
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: carbon-controller
+  namespace: carbon-system
+spec:
+  selector:
+    matchLabels:
+      app: carbon-controller
+  endpoints:
+    - port: metrics
+      interval: 15s
