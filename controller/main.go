@@ -38,6 +38,8 @@ const (
 var (
 	currentIntensity = prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "carbon_current_intensity", Help: "Current grid carbon intensity in gCO2/kWh."})
+	policyThreshold = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "carbon_policy_threshold", Help: "Active carbon threshold in gCO2/kWh."})
 	jobsWaiting = prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "carbon_jobs_waiting", Help: "Deferrable jobs currently suspended."})
 	jobsSuspended = prometheus.NewCounter(prometheus.CounterOpts{
@@ -118,6 +120,7 @@ func (c *Controller) reconcile(ctx context.Context) error {
 	}
 	currentIntensity.Set(intensity)
 	dirty := intensity > p.Threshold
+	policyThreshold.Set(p.Threshold)
 
 	namespaces := p.Namespaces
 	if len(namespaces) == 0 {
@@ -236,7 +239,7 @@ func main() {
 	policyName := flag.String("policy", "default", "name of the CarbonPolicy object to read")
 	flag.Parse()
 
-	prometheus.MustRegister(currentIntensity, jobsWaiting, jobsSuspended, jobsResumed, forcedRuns, co2Avoided)
+	prometheus.MustRegister(currentIntensity, policyThreshold, jobsWaiting, jobsSuspended, jobsResumed, forcedRuns, co2Avoided)
 
 	cfg, err := rest.InClusterConfig()
 	if err != nil {
