@@ -1,0 +1,8 @@
+apiVersion: green.devops/v1alpha1
+kind: CarbonPolicy
+metadata:
+  name: default
+spec:
+  thresholdGramsPerKwh: 250
+  namespaces: ["default"]
+  maxDelayHours: 6

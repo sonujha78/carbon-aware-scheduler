@@ -1,0 +1,54 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: carbonpolicies.green.devops
+spec:
+  group: green.devops
+  scope: Cluster
+  names:
+    kind: CarbonPolicy
+    plural: carbonpolicies
+    singular: carbonpolicy
+    shortNames: ["cp"]
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Threshold
+          type: number
+          jsonPath: .spec.thresholdGramsPerKwh
+        - name: Intensity
+          type: number
+          jsonPath: .status.currentIntensity
+        - name: Dirty
+          type: boolean
+          jsonPath: .status.dirty
+        - name: Waiting
+          type: integer
+          jsonPath: .status.waitingJobs
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                thresholdGramsPerKwh:
+                  type: number
+                  minimum: 0
+                  description: Jobs are suspended while intensity is above this value.
+                namespaces:
+                  type: array
+                  items:
+                    type: string
+                  description: Only manage jobs in these namespaces (empty = all).
+                maxDelayHours:
+                  type: number
+                  minimum: 0
+                  description: Force-run a job that has waited longer than this (0 = no limit).
+            status:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true

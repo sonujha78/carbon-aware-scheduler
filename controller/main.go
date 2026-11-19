@@ -20,6 +20,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -50,10 +51,12 @@ var (
 )
 
 type Controller struct {
-	client    kubernetes.Interface
-	http      *http.Client
-	carbonURL string
-	threshold float64
+	client     kubernetes.Interface
+	http       *http.Client
+	carbonURL  string
+	dyn        dynamic.Interface
+	policyName string
+	defaults   Policy
 }
 
 func ptr[T any](v T) *T { return &v }
@@ -108,27 +111,36 @@ func (c *Controller) fetchIntensity(ctx context.Context) (float64, error) {
 }
 
 func (c *Controller) reconcile(ctx context.Context) error {
+	p := c.loadPolicy(ctx)
 	intensity, err := c.fetchIntensity(ctx)
 	if err != nil {
 		return fmt.Errorf("fetch intensity: %w", err)
 	}
 	currentIntensity.Set(intensity)
-	dirty := intensity > c.threshold
+	dirty := intensity > p.Threshold
 
-	jobs, err := c.client.BatchV1().Jobs(metav1.NamespaceAll).List(ctx, metav1.ListOptions{
-		LabelSelector: labelDeferrable + "=true",
-	})
-	if err != nil {
-		return fmt.Errorf("list jobs: %w", err)
+	namespaces := p.Namespaces
+	if len(namespaces) == 0 {
+		namespaces = []string{metav1.NamespaceAll}
+	}
+	var jobs []batchv1.Job
+	for _, ns := range namespaces {
+		list, err := c.client.BatchV1().Jobs(ns).List(ctx, metav1.ListOptions{
+			LabelSelector: labelDeferrable + "=true",
+		})
+		if err != nil {
+			return fmt.Errorf("list jobs in %q: %w", ns, err)
+		}
+		jobs = append(jobs, list.Items...)
 	}
 
 	waiting := 0
-	for i := range jobs.Items {
-		job := &jobs.Items[i]
+	for i := range jobs {
+		job := &jobs[i]
 		if isFinished(job) {
 			continue
 		}
-		if err := c.reconcileJob(ctx, job, intensity, dirty); err != nil {
+		if err := c.reconcileJob(ctx, job, intensity, dirty, p); err != nil {
 			log.Printf("job %s/%s: %v", job.Namespace, job.Name, err)
 			continue
 		}
@@ -137,12 +149,19 @@ func (c *Controller) reconcile(ctx context.Context) error {
 		}
 	}
 	jobsWaiting.Set(float64(waiting))
-	log.Printf("intensity=%.1f threshold=%.0f dirty=%v deferrable_jobs=%d waiting=%d",
-		intensity, c.threshold, dirty, len(jobs.Items), waiting)
+	if p.FromCRD {
+		c.updateStatus(ctx, intensity, dirty, waiting)
+	}
+	source := "flags"
+	if p.FromCRD {
+		source = "crd"
+	}
+	log.Printf("intensity=%.1f threshold=%.0f (%s) dirty=%v deferrable_jobs=%d waiting=%d",
+		intensity, p.Threshold, source, dirty, len(jobs), waiting)
 	return nil
 }
 
-func (c *Controller) reconcileJob(ctx context.Context, job *batchv1.Job, intensity float64, dirty bool) error {
+func (c *Controller) reconcileJob(ctx context.Context, job *batchv1.Job, intensity float64, dirty bool, p Policy) error {
 	if job.Annotations == nil {
 		job.Annotations = map[string]string{}
 	}
@@ -163,6 +182,10 @@ func (c *Controller) reconcileJob(ctx context.Context, job *batchv1.Job, intensi
 		} else {
 			mustRun = time.Now().Add(est).After(deadline)
 		}
+	}
+
+	if p.MaxDelay > 0 && time.Since(job.CreationTimestamp.Time) > p.MaxDelay {
+		mustRun = true
 	}
 
 	suspended := job.Spec.Suspend != nil && *job.Spec.Suspend
@@ -210,6 +233,7 @@ func main() {
 	interval := flag.Duration("interval", 10*time.Second, "reconcile interval")
 	metricsAddr := flag.String("metrics-addr", ":9095", "metrics listen address")
 	kubeconfig := flag.String("kubeconfig", filepath.Join(os.Getenv("HOME"), ".kube", "config"), "kubeconfig path (used when not in-cluster)")
+	policyName := flag.String("policy", "default", "name of the CarbonPolicy object to read")
 	flag.Parse()
 
 	prometheus.MustRegister(currentIntensity, jobsWaiting, jobsSuspended, jobsResumed, forcedRuns, co2Avoided)
@@ -239,11 +263,17 @@ func main() {
 		}
 	}()
 
+	dyn, err := dynamic.NewForConfig(cfg)
+	if err != nil {
+		log.Fatalf("dynamic client: %v", err)
+	}
 	c := &Controller{
-		client:    client,
-		http:      &http.Client{Timeout: 5 * time.Second},
-		carbonURL: *carbonURL,
-		threshold: *threshold,
+		client:     client,
+		http:       &http.Client{Timeout: 5 * time.Second},
+		carbonURL:  *carbonURL,
+		dyn:        dyn,
+		policyName: *policyName,
+		defaults:   Policy{Threshold: *threshold},
 	}
 	log.Printf("carbon controller started: threshold=%.0f interval=%s", *threshold, *interval)
 
